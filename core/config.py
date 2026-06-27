@@ -14,5 +14,8 @@ class ExecutionConfig:
     logging: dict[str, Any] = field(default_factory=dict)
     agents: dict[str, str] = field(default_factory=dict)
     skills: dict[str, str] = field(default_factory=dict)
+    environment: dict[str, str] = field(default_factory=dict)
+    verification_commands: dict[str, list[str]] = field(default_factory=dict)
+    command_timeout_seconds: float | None = 60
+    command_retries: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
-

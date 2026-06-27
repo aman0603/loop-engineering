@@ -4,10 +4,11 @@ import inspect
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from core.artifacts import VerificationArtifact
+from core.artifacts import BuildArtifact, TestArtifact, VerificationArtifact
 from core.events import Event, EventType
 from core.execution import ExecutionContext
 from core.task_manager.models import Task, VerificationOutcome, VerificationResult, utc_now
+from runtime import CommandSpec, LocalRuntime, Runtime
 from skills.base import SkillContext
 
 
@@ -90,6 +91,56 @@ class CriteriaCoverageCheck(VerificationCheck):
         )
 
 
+class CommandVerificationCheck(VerificationCheck):
+    def __init__(
+        self,
+        name: str,
+        command: list[str],
+        runtime: Runtime | None = None,
+        optional: bool = False,
+        timeout_seconds: float | None = None,
+    ) -> None:
+        self.name = name
+        self.command = command
+        self.runtime = runtime or LocalRuntime()
+        self.optional = optional
+        self.timeout_seconds = timeout_seconds
+
+    def run(self, context: ExecutionContext) -> VerificationResult:
+        started_at = utc_now()
+        result = self.runtime.execute(
+            CommandSpec(
+                args=self.command,
+                cwd=context.working_directory,
+                timeout_seconds=self.timeout_seconds,
+                name=f"verify.{self.name}",
+            ),
+            context,
+        ).result
+        passed = result.success or self.optional
+        artifact_content = result.to_dict()
+        if "test" in self.name or "pytest" in self.name:
+            context.add_artifact(TestArtifact(self.name, artifact_content, optional=self.optional))
+        else:
+            context.add_artifact(BuildArtifact(self.name, artifact_content, optional=self.optional))
+        context.emit(
+            Event(
+                EventType.TESTS_PASSED if passed else EventType.TESTS_FAILED,
+                context.task.id,
+                {"check": self.name, "exit_code": result.exit_code, "optional": self.optional},
+            )
+        )
+        return VerificationResult(
+            name=self.name,
+            outcome=VerificationOutcome.PASSED if passed else VerificationOutcome.FAILED,
+            summary=f"{self.name} passed" if passed else f"{self.name} failed",
+            details={"command": self.command, "result": result.to_dict(), "optional": self.optional},
+            metrics={"duration_ms": result.duration_ms},
+            started_at=started_at,
+            finished_at=utc_now(),
+        )
+
+
 class VerificationPipeline:
     name = "verification.pipeline"
 
@@ -132,4 +183,27 @@ class VerificationPipeline:
                 report.metrics,
             )
         )
+        context.emit(
+            Event(
+                EventType.VERIFICATION_EXECUTED,
+                context.task.id,
+                {"passed": report.passed, **report.metrics},
+            )
+        )
         return report
+
+
+class RuntimeVerificationPipeline(VerificationPipeline):
+    @classmethod
+    def from_context(cls, context: ExecutionContext, runtime: Runtime | None = None) -> "RuntimeVerificationPipeline":
+        checks: list[VerificationCheck] = []
+        for name, command in context.configuration.verification_commands.items():
+            checks.append(
+                CommandVerificationCheck(
+                    name=name,
+                    command=command,
+                    runtime=runtime,
+                    timeout_seconds=context.configuration.verification_timeout_seconds,
+                )
+            )
+        return cls(checks)

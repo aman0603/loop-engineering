@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from agents.coder import CodingAgent
 from agents.planner import PlannerAgent
 from core.config import ExecutionConfig
@@ -12,7 +14,9 @@ from core.task_manager import InMemoryTaskRepository, Task, TaskRepository, Task
 from core.workflow import DefaultEngineeringWorkflowFactory, WorkflowEngine
 from skills.coding import CodingSkill
 from skills.planning import PlanningSkill
-from verification import ArtifactExistsCheck, CriteriaCoverageCheck, VerificationPipeline
+from tools import FileSystemTool, GitTool, HTTPTool, PythonTool, SearchTool, ShellTool, TestTool
+from verification import VerificationPipeline
+from worktree import WorktreeManager
 
 
 class WorkflowSelector:
@@ -33,6 +37,7 @@ class Scheduler:
         skill_registry: SkillRegistry | None = None,
         verifier_registry: VerifierRegistry | None = None,
         tool_registry: ToolRegistry | None = None,
+        worktree_manager: WorktreeManager | None = None,
     ) -> None:
         self.repository = repository
         self.workflow_registry = workflow_registry
@@ -44,6 +49,7 @@ class Scheduler:
         self.skill_registry = skill_registry or SkillRegistry()
         self.verifier_registry = verifier_registry or VerifierRegistry()
         self.tool_registry = tool_registry or ToolRegistry()
+        self.worktree_manager = worktree_manager
 
     @classmethod
     def default(cls) -> "Scheduler":
@@ -74,6 +80,10 @@ class Scheduler:
             event_bus=event_bus,
         ).build()
         registry.register(workflow)
+        tool_registry = ToolRegistry()
+        for tool in [ShellTool(), FileSystemTool(), GitTool(), PythonTool(), TestTool(), SearchTool(), HTTPTool()]:
+            tool_registry.register(tool)
+
         return cls(
             repository=InMemoryTaskRepository(),
             workflow_registry=registry,
@@ -81,8 +91,18 @@ class Scheduler:
             agent_registry=agent_registry,
             skill_registry=skill_registry,
             verifier_registry=verifier_registry,
-            tool_registry=ToolRegistry(),
+            tool_registry=tool_registry,
         )
+
+    @classmethod
+    def runtime_default(
+        cls,
+        repository: str | Path,
+        worktree_root: str | Path | None = None,
+    ) -> "Scheduler":
+        scheduler = cls.default()
+        scheduler.worktree_manager = WorktreeManager(repository, root=worktree_root)
+        return scheduler
 
     def submit(self, task: Task) -> None:
         if task.status != TaskStatus.NEW:
@@ -106,7 +126,14 @@ class Scheduler:
             current_workflow=workflow_name,
             event_bus=self.event_bus,
         )
-        execution = self.workflow_engine.run(definition, context)
+        worktree = None
+        try:
+            if self.worktree_manager is not None:
+                worktree = self.worktree_manager.create_worktree(context)
+            execution = self.workflow_engine.run(definition, context)
+        finally:
+            if worktree is not None and self.worktree_manager is not None:
+                self.worktree_manager.cleanup_worktree(context, worktree, force=True)
         finished_task = execution.context.task
         finished_task.metadata["last_execution"] = execution.context.observability_snapshot()
         self.repository.save(finished_task)

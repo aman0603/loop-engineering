@@ -15,6 +15,10 @@ class Decision(str, Enum):
     ESCALATE = "ESCALATE"
     ABORT = "ABORT"
     COMPLETE = "COMPLETE"
+    RETRY_COMMAND = "RETRY_COMMAND"
+    ROLLBACK_WORKTREE = "ROLLBACK_WORKTREE"
+    RECREATE_RUNTIME = "RECREATE_RUNTIME"
+    SKIP_OPTIONAL_STEP = "SKIP_OPTIONAL_STEP"
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,3 +50,15 @@ class DecisionEngine:
             )
         return DecisionResult(Decision.ABORT, "no actionable verification result")
 
+    def decide_recovery(self, context: ExecutionContext, failure: dict[str, Any]) -> DecisionResult:
+        if context.cancelled:
+            return DecisionResult(Decision.ABORT, "execution was cancelled")
+        if failure.get("optional"):
+            return DecisionResult(Decision.SKIP_OPTIONAL_STEP, "optional failure can be skipped", failure)
+        if failure.get("kind") == "command" and int(failure.get("attempts", 1)) <= context.configuration.command_retries:
+            return DecisionResult(Decision.RETRY_COMMAND, "command retry budget remains", failure)
+        if failure.get("kind") == "worktree":
+            return DecisionResult(Decision.ROLLBACK_WORKTREE, "worktree failure requires rollback", failure)
+        if failure.get("kind") == "runtime":
+            return DecisionResult(Decision.RECREATE_RUNTIME, "runtime should be recreated", failure)
+        return DecisionResult(Decision.ABORT, "failure is not recoverable", failure)

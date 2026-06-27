@@ -6,6 +6,6 @@ __pycache__/
 .coverage
 htmlcov/
 .venv/
+.loop-worktrees/
 dist/
 build/
-

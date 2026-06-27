@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -85,6 +86,10 @@ class ExecutionContext:
     artifact_store: ArtifactStore = field(default_factory=ArtifactStore)
     cancellation_token: CancellationToken = field(default_factory=CancellationToken)
     runtime_variables: dict[str, Any] = field(default_factory=dict)
+    working_directory: Path | None = None
+    runtime: Any | None = None
+    tools: dict[str, Any] = field(default_factory=dict)
+    worktree_path: Path | None = None
     feedback: list[Any] = field(default_factory=list)
     workflow_state: str | None = None
     state_transitions: list[dict[str, Any]] = field(default_factory=list)
@@ -197,5 +202,6 @@ class ExecutionContext:
                 for entry in self.timeline
             ],
             "metrics": self.metrics.snapshot(),
+            "working_directory": str(self.working_directory) if self.working_directory else None,
+            "worktree_path": str(self.worktree_path) if self.worktree_path else None,
         }
-

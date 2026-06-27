@@ -15,6 +15,11 @@ class ArtifactType(str, Enum):
     LOG = "log"
     PATCH = "patch"
     DOCUMENTATION = "documentation"
+    COMMAND = "command"
+    TEST = "test"
+    DIFF = "diff"
+    BUILD = "build"
+    RUNTIME_LOG = "runtime_log"
 
 
 def artifact_id() -> str:
@@ -77,6 +82,31 @@ class DocumentationArtifact(Artifact):
         super().__init__(ArtifactType.DOCUMENTATION, producer, content, metadata)
 
 
+class CommandArtifact(Artifact):
+    def __init__(self, producer: str, content: Any, **metadata: Any) -> None:
+        super().__init__(ArtifactType.COMMAND, producer, content, metadata)
+
+
+class TestArtifact(Artifact):
+    def __init__(self, producer: str, content: Any, **metadata: Any) -> None:
+        super().__init__(ArtifactType.TEST, producer, content, metadata)
+
+
+class DiffArtifact(Artifact):
+    def __init__(self, producer: str, content: Any, **metadata: Any) -> None:
+        super().__init__(ArtifactType.DIFF, producer, content, metadata)
+
+
+class BuildArtifact(Artifact):
+    def __init__(self, producer: str, content: Any, **metadata: Any) -> None:
+        super().__init__(ArtifactType.BUILD, producer, content, metadata)
+
+
+class RuntimeLogArtifact(Artifact):
+    def __init__(self, producer: str, content: Any, **metadata: Any) -> None:
+        super().__init__(ArtifactType.RUNTIME_LOG, producer, content, metadata)
+
+
 class ArtifactStore:
     def __init__(self, artifacts: Iterable[Artifact] | None = None) -> None:
         self._artifacts: dict[str, Artifact] = {}
@@ -133,4 +163,3 @@ class ArtifactStore:
     @staticmethod
     def _type_key(artifact_type: ArtifactType | str) -> str:
         return artifact_type.value if isinstance(artifact_type, ArtifactType) else artifact_type
-

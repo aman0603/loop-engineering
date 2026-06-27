@@ -161,7 +161,7 @@ def test_scheduler_dispatch_exposes_observability_and_new_events():
     assert scheduler.agent_registry.get("planner").name == "planner"
     assert scheduler.skill_registry.get("planning.default").name == "planning.default"
     assert scheduler.verifier_registry.names()
-    assert scheduler.tool_registry.names() == []
+    assert set(scheduler.tool_registry.names()) >= {"shell", "filesystem", "git", "python", "test", "search", "http"}
     assert result.metadata["last_execution"]["retries"] == 1
     assert {event.type for event in scheduler.event_bus.list()} >= {
         EventType.TASK_SCHEDULED,

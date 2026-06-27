@@ -1,6 +1,8 @@
 from verification.pipeline import (
     ArtifactExistsCheck,
     CriteriaCoverageCheck,
+    CommandVerificationCheck,
+    RuntimeVerificationPipeline,
     VerificationCheck,
     VerificationPipeline,
     VerificationReport,
@@ -9,8 +11,9 @@ from verification.pipeline import (
 __all__ = [
     "ArtifactExistsCheck",
     "CriteriaCoverageCheck",
+    "CommandVerificationCheck",
+    "RuntimeVerificationPipeline",
     "VerificationCheck",
     "VerificationPipeline",
     "VerificationReport",
 ]
-
