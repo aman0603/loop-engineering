@@ -61,4 +61,12 @@ class DecisionEngine:
             return DecisionResult(Decision.ROLLBACK_WORKTREE, "worktree failure requires rollback", failure)
         if failure.get("kind") == "runtime":
             return DecisionResult(Decision.RECREATE_RUNTIME, "runtime should be recreated", failure)
+        if failure.get("kind") == "plan_step":
+            return DecisionResult(Decision.RETRY, "plan step failed and can be replanned", failure)
+        if failure.get("kind") == "agent_adapter":
+            if failure.get("replacement_available"):
+                return DecisionResult(Decision.CHANGE_AGENT, "switch to another adapter with matching capability", failure)
+            if int(failure.get("attempts", 1)) < int(failure.get("max_attempts", 1)):
+                return DecisionResult(Decision.RETRY, "adapter retry budget remains", failure)
+            return DecisionResult(Decision.ESCALATE, "no adapter can satisfy the failed step", failure)
         return DecisionResult(Decision.ABORT, "failure is not recoverable", failure)

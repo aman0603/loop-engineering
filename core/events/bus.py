@@ -18,6 +18,12 @@ class EventType(str, Enum):
     WORKFLOW_FINISHED = "WorkflowFinished"
     PLANNING_STARTED = "PlanningStarted"
     PLANNING_COMPLETED = "PlanningCompleted"
+    PLAN_REVISED = "PlanRevised"
+    PLAN_STEP_STARTED = "PlanStepStarted"
+    PLAN_STEP_FINISHED = "PlanStepFinished"
+    PARALLEL_GROUP_STARTED = "ParallelGroupStarted"
+    PARALLEL_GROUP_FINISHED = "ParallelGroupFinished"
+    BRANCH_SELECTED = "BranchSelected"
     SKILL_STARTED = "SkillStarted"
     SKILL_FINISHED = "SkillFinished"
     VERIFICATION_STARTED = "VerificationStarted"
@@ -39,7 +45,9 @@ class EventType(str, Enum):
     RECOVERY_REQUESTED = "RecoveryRequested"
     RECOVERY_FINISHED = "RecoveryFinished"
     AGENT_STARTED = "AgentStarted"
+    AGENT_OUTPUT_CHUNK = "AgentOutputChunk"
     AGENT_FINISHED = "AgentFinished"
+    AGENT_FAILED = "AgentFailed"
     MEMORY_UPDATED = "MemoryUpdated"
 
 

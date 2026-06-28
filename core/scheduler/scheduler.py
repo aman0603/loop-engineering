@@ -4,14 +4,16 @@ from pathlib import Path
 
 from agents.coder import CodingAgent
 from agents.planner import PlannerAgent
+from agents.adapters import MockAgentAdapter
 from core.config import ExecutionConfig
 from core.events import Event, EventBus, EventType, InMemoryEventBus
 from core.execution import ExecutionContext
 from core.feedback import FeedbackEngine
+from core.planning import ExecutionPlan, PlannerEngine
 from core.registries import AgentRegistry, SkillRegistry, ToolRegistry, VerifierRegistry, WorkflowRegistry
 from core.scheduler.queue import TaskPriorityQueue
 from core.task_manager import InMemoryTaskRepository, Task, TaskRepository, TaskStatus
-from core.workflow import DefaultEngineeringWorkflowFactory, WorkflowEngine
+from core.workflow import DefaultEngineeringWorkflowFactory, DynamicWorkflowBuilder, PlanWorkflowExecutor, WorkflowEngine
 from skills.coding import CodingSkill
 from skills.planning import PlanningSkill
 from tools import FileSystemTool, GitTool, HTTPTool, PythonTool, SearchTool, ShellTool, TestTool
@@ -38,6 +40,7 @@ class Scheduler:
         verifier_registry: VerifierRegistry | None = None,
         tool_registry: ToolRegistry | None = None,
         worktree_manager: WorktreeManager | None = None,
+        planner_engine: PlannerEngine | None = None,
     ) -> None:
         self.repository = repository
         self.workflow_registry = workflow_registry
@@ -50,6 +53,7 @@ class Scheduler:
         self.verifier_registry = verifier_registry or VerifierRegistry()
         self.tool_registry = tool_registry or ToolRegistry()
         self.worktree_manager = worktree_manager
+        self.planner_engine = planner_engine or PlannerEngine()
 
     @classmethod
     def default(cls) -> "Scheduler":
@@ -65,6 +69,7 @@ class Scheduler:
         coder = CodingAgent(coding_skill)
         agent_registry.register(planner)
         agent_registry.register(coder)
+        agent_registry.register_adapter(MockAgentAdapter())
 
         verifier_registry = VerifierRegistry()
         verification = VerificationPipeline()
@@ -103,6 +108,54 @@ class Scheduler:
         scheduler = cls.default()
         scheduler.worktree_manager = WorktreeManager(repository, root=worktree_root)
         return scheduler
+
+    def create_execution_plan(self, task: Task, context: ExecutionContext | None = None) -> ExecutionPlan:
+        planning_context = context or ExecutionContext(task=task, event_bus=self.event_bus)
+        return self.planner_engine.plan(
+            task,
+            planning_context,
+            self.skill_registry,
+            self.tool_registry,
+            self.agent_registry,
+        )
+
+    def run_planned(self, task: Task, plan: ExecutionPlan | None = None) -> Task:
+        if self.repository.get(task.id) is None:
+            self.repository.save(task)
+        context = ExecutionContext(
+            task=task,
+            configuration=ExecutionConfig(retry_limit=task.max_attempts, workflow_name="dynamic_plan"),
+            current_workflow="dynamic_plan",
+            event_bus=self.event_bus,
+        )
+        execution_plan = plan or self.create_execution_plan(task, context)
+        workflow = DynamicWorkflowBuilder(
+            PlanWorkflowExecutor(skills=self.skill_registry, agents=self.agent_registry, planner=self.planner_engine)
+        ).build(execution_plan)
+        worktree = None
+        try:
+            if self.worktree_manager is not None:
+                worktree = self.worktree_manager.create_worktree(context)
+            execution = self.workflow_engine.run(workflow, context)
+        finally:
+            if worktree is not None and self.worktree_manager is not None:
+                self.worktree_manager.cleanup_worktree(context, worktree, force=True)
+        finished_task = execution.context.task
+        if execution.status.value == "COMPLETED" and finished_task.status == TaskStatus.NEW:
+            finished_task.transition_to(TaskStatus.PLANNING)
+            finished_task.transition_to(TaskStatus.EXECUTING)
+            finished_task.transition_to(TaskStatus.VERIFYING)
+            finished_task.transition_to(TaskStatus.DONE)
+        elif execution.status.value != "COMPLETED" and finished_task.status == TaskStatus.NEW:
+            finished_task.transition_to(TaskStatus.FAILED)
+        finished_task.metadata["last_execution"] = execution.context.observability_snapshot()
+        finished_task.metadata["last_plan"] = execution_plan.to_dict()
+        self.repository.save(finished_task)
+        if execution.status.value == "COMPLETED":
+            self.event_bus.publish(Event(EventType.TASK_COMPLETED, finished_task.id, {"plan_id": execution_plan.id}))
+        else:
+            self.event_bus.publish(Event(EventType.TASK_FAILED, finished_task.id, {"plan_id": execution_plan.id}))
+        return finished_task
 
     def submit(self, task: Task) -> None:
         if task.status != TaskStatus.NEW:

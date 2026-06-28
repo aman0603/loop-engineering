@@ -1,4 +1,5 @@
 from core.workflow.engineering import DefaultEngineeringWorkflowFactory
+from core.workflow.dynamic import DynamicWorkflowBuilder
 from core.workflow.graph import (
     FunctionNode,
     NodeResult,
@@ -8,15 +9,48 @@ from core.workflow.graph import (
     WorkflowExecution,
     WorkflowStatus,
 )
+from core.workflow.nodes import (
+    AdaptiveReplanningNode,
+    BranchRule,
+    DecisionNode,
+    DocumentationNode,
+    HumanApprovalNode,
+    ImplementationNode,
+    AgentAdapterStepNode,
+    PlanDecisionNode,
+    PlanningNode,
+    PlanStepNode,
+    ResearchNode,
+    ReviewNode,
+    TestingNode,
+    VerificationNode,
+)
+from core.workflow.plan_executor import PlanExecutionResult, PlanWorkflowExecutor
 
 __all__ = [
     "DefaultEngineeringWorkflowFactory",
+    "DynamicWorkflowBuilder",
     "FunctionNode",
+    "AdaptiveReplanningNode",
+    "AgentAdapterStepNode",
+    "BranchRule",
+    "DecisionNode",
+    "DocumentationNode",
+    "HumanApprovalNode",
+    "ImplementationNode",
     "NodeResult",
+    "PlanDecisionNode",
+    "PlanExecutionResult",
+    "PlanStepNode",
+    "PlanWorkflowExecutor",
+    "PlanningNode",
+    "ResearchNode",
+    "ReviewNode",
+    "TestingNode",
+    "VerificationNode",
     "WorkflowContext",
     "WorkflowDefinition",
     "WorkflowEngine",
     "WorkflowExecution",
     "WorkflowStatus",
 ]
-

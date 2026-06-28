@@ -95,6 +95,7 @@ class ExecutionContext:
     state_transitions: list[dict[str, Any]] = field(default_factory=list)
     verification_results: list[Any] = field(default_factory=list)
     errors: list[dict[str, Any]] = field(default_factory=list)
+    agent_sessions: dict[str, Any] = field(default_factory=dict)
     timeline: list[TimelineEntry] = field(default_factory=list)
     id: str = field(default_factory=lambda: f"exec_{uuid4().hex}")
     start_time: datetime = field(default_factory=utc_now)
@@ -171,6 +172,46 @@ class ExecutionContext:
     def record_timeline(self, name: str, **metadata: Any) -> None:
         self.timeline.append(TimelineEntry(name=name, timestamp=utc_now(), metadata=metadata))
 
+    def start_agent_session(
+        self,
+        provider: str,
+        model: str,
+        active_step: str,
+        workflow_id: str | None = None,
+    ) -> Any:
+        from agents.adapters.session import AgentSession
+
+        session = AgentSession(
+            task_id=self.task.id,
+            workflow_id=workflow_id,
+            active_step=active_step,
+            provider=provider,
+            model=model,
+        )
+        session.start()
+        self.agent_sessions[session.id] = session
+        self.record_timeline("agent_session_started", session_id=session.id, provider=provider, step_id=active_step)
+        return session
+
+    def finish_agent_session(
+        self,
+        session_id: str,
+        failed: bool = False,
+        cancelled: bool = False,
+        artifacts: list[Artifact] | None = None,
+    ) -> None:
+        from agents.adapters.session import AgentSessionStatus
+
+        session = self.agent_sessions[session_id]
+        if cancelled:
+            status = AgentSessionStatus.CANCELLED
+        elif failed:
+            status = AgentSessionStatus.FAILED
+        else:
+            status = AgentSessionStatus.COMPLETED
+        session.finish(status, artifacts=artifacts)
+        self.record_timeline("agent_session_finished", session_id=session_id, status=status.value)
+
     def finish(self) -> None:
         self.end_time = utc_now()
         self.metrics.record_timing("execution_time_ms", self.execution_time_ms)
@@ -204,4 +245,5 @@ class ExecutionContext:
             "metrics": self.metrics.snapshot(),
             "working_directory": str(self.working_directory) if self.working_directory else None,
             "worktree_path": str(self.worktree_path) if self.worktree_path else None,
+            "agent_sessions": [session.to_dict() for session in self.agent_sessions.values()],
         }

@@ -21,6 +21,7 @@ from core.config import ExecutionConfig
 from core.decision import Decision, DecisionEngine, DecisionResult
 from core.execution import CancellationToken, ExecutionContext, ExecutionLogger, MetricsCollector
 from core.registries import AgentRegistry, SkillRegistry, ToolRegistry, VerifierRegistry, WorkflowRegistry
+from core.planning import ExecutionPlan, ExecutionStep, PlannerEngine, RetryPolicy
 
 __all__ = [
     "AgentRegistry",
@@ -39,11 +40,15 @@ __all__ = [
     "ExecutionConfig",
     "ExecutionContext",
     "ExecutionLogger",
+    "ExecutionPlan",
+    "ExecutionStep",
     "LogArtifact",
     "MetricsCollector",
     "PatchArtifact",
     "PlanArtifact",
+    "PlannerEngine",
     "ReviewArtifact",
+    "RetryPolicy",
     "RuntimeLogArtifact",
     "SkillRegistry",
     "TestArtifact",

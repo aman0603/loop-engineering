@@ -7,6 +7,7 @@ from skills.base import Skill, SkillResult
 
 class PlanningSkill(Skill):
     name = "planning.default"
+    metadata = {"capabilities": ["planning"], "tools": [], "cost": 1.0, "avg_duration_ms": 100}
 
     def run(self, context: ExecutionContext) -> SkillResult:
         task = context.task

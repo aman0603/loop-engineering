@@ -38,6 +38,41 @@ class Registry(Generic[T]):
 class AgentRegistry(Registry):
     def __init__(self) -> None:
         super().__init__("agent")
+        self._adapters: dict[str, object] = {}
+
+    def register_adapter(self, adapter: object) -> None:
+        name = getattr(adapter, "name", None)
+        if not name:
+            raise ValueError("agent adapter name is required")
+        self._adapters[str(name)] = adapter
+
+    def unregister_adapter(self, name: str) -> None:
+        self._adapters.pop(name, None)
+
+    def get_adapter(self, name: str) -> object:
+        try:
+            return self._adapters[name]
+        except KeyError as exc:
+            raise KeyError(f"agent adapter not registered: {name}") from exc
+
+    def list_adapters(self) -> list[object]:
+        return list(self._adapters.values())
+
+    def adapter_names(self) -> list[str]:
+        return list(self._adapters)
+
+    def find_adapter_for_capability(self, capability: str, exclude: set[str] | None = None) -> object | None:
+        excluded = exclude or set()
+        for adapter in self._adapters.values():
+            if getattr(adapter, "name") in excluded:
+                continue
+            health = adapter.health() if hasattr(adapter, "health") else None
+            if health is not None and not health.available:
+                continue
+            capabilities = adapter.capabilities() if hasattr(adapter, "capabilities") else []
+            if any(item.name == capability for item in capabilities):
+                return adapter
+        return None
 
 
 class SkillRegistry(Registry):
@@ -58,4 +93,3 @@ class VerifierRegistry(Registry):
 class ToolRegistry(Registry):
     def __init__(self) -> None:
         super().__init__("tool")
-
