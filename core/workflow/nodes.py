@@ -149,6 +149,9 @@ class PlanStepNode(BaseWorkflowNode):
         self.handler = handler
 
     def run(self, context: ExecutionContext) -> NodeResult:
+        import time
+
+        started = time.monotonic()
         context.emit(Event(EventType.PLAN_STEP_STARTED, context.task.id, {"step_id": self.step.id}))
         self.step.status = PlanStatus.RUNNING
         self.step.attempts += 1
@@ -161,6 +164,7 @@ class PlanStepNode(BaseWorkflowNode):
                 {"step_id": self.step.id, "success": ok, "attempts": self.step.attempts},
             )
         )
+        context.metrics.record_timing(f"workflow.step.{self.step.id}.duration_ms", (time.monotonic() - started) * 1000)
         return NodeResult(context=context, failed=not ok)
 
     def _run_default(self, context: ExecutionContext) -> bool:
@@ -249,8 +253,7 @@ class AgentAdapterStepNode(BaseWorkflowNode):
                 adapter = replacement
                 self.step.metadata["adapter"] = adapter.name
                 continue
-            if decision.decision != Decision.RETRY:
-                break
+            break
         return NodeResult(context=context, failed=True)
 
 

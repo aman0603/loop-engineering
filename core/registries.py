@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Generic, Protocol, TypeVar
 
 
@@ -83,6 +84,50 @@ class SkillRegistry(Registry):
 class WorkflowRegistry(Registry):
     def __init__(self) -> None:
         super().__init__("workflow")
+        self._workflow_specs: dict[str, object] = {}
+
+    def register_workflow(self, workflow: object) -> None:
+        if isinstance(workflow, dict):
+            from core.workflow.library import EngineeringWorkflowDefinition
+
+            workflow = EngineeringWorkflowDefinition.from_dict(workflow)
+        name = getattr(workflow, "name", None)
+        if not name:
+            raise ValueError("workflow name is required")
+        if hasattr(workflow, "validate"):
+            workflow.validate()
+        self._workflow_specs[str(name)] = workflow
+
+    def unregister_workflow(self, name: str) -> None:
+        self._workflow_specs.pop(name, None)
+
+    def list_workflows(self) -> list[object]:
+        return list(self._workflow_specs.values())
+
+    def load_workflow(self, name: str) -> object:
+        try:
+            return self._workflow_specs[name]
+        except KeyError as exc:
+            raise KeyError(f"workflow definition not registered: {name}") from exc
+
+    def validate_workflow(self, name: str) -> bool:
+        workflow = self.load_workflow(name)
+        if hasattr(workflow, "validate"):
+            workflow.validate()
+        return True
+
+    def import_workflow(self, path: str | Path) -> object:
+        from core.workflow.library import EngineeringWorkflowDefinition
+
+        workflow = EngineeringWorkflowDefinition.load(path)
+        self.register_workflow(workflow)
+        return workflow
+
+    def export_workflow(self, name: str, path: str | Path) -> None:
+        workflow = self.load_workflow(name)
+        if not hasattr(workflow, "export"):
+            raise TypeError(f"workflow '{name}' is not exportable")
+        workflow.export(path)
 
 
 class VerifierRegistry(Registry):

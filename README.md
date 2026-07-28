@@ -54,6 +54,23 @@ Phase 3.5 agent adapter layer:
 - Adapter failure recovery that can retry, switch to another compatible adapter, or escalate through the decision engine
 - Dynamic planned execution now resolves execution steps through adapter capabilities before falling back to legacy skills
 
+Phase 4 engineering workflow library:
+
+- Declarative reusable workflow definitions with metadata, parameters, steps, dependencies, retry policies, verification stages, approval stages, and outputs
+- Workflow registry APIs for registering, unregistering, listing, loading, validating, importing, and exporting workflows
+- JSON and YAML workflow import/export support
+- Built-in workflows:
+  - `feature-development`
+  - `bug-fix`
+  - `refactoring`
+  - `code-review`
+  - `documentation`
+  - `test-generation`
+  - `dependency-upgrade`
+- Workflow composition, for example feature development composes documentation and code review workflows
+- Execution graph visualization artifacts containing DAG, timeline, state transitions, artifact graph, and workflow metrics
+- Workflow metrics including duration, step timings, retries, critical path, parallel efficiency, success, and verification failures
+
 The scheduler intentionally contains no engineering business logic. It selects a workflow and executes it through the workflow engine. Skills, agents, verification checks, repositories, and workflow definitions are replaceable.
 
 For runtime execution that must isolate task work in Git worktrees, construct the scheduler with:
@@ -77,20 +94,103 @@ task = Task(title="Build feature with tests", description="Implement and verify 
 result = scheduler.run_planned(task)
 ```
 
-## Run Tests
+For a reusable engineering workflow:
 
-```bash
-python -m pytest
+```python
+from core.scheduler import Scheduler
+
+scheduler = Scheduler.default()
+result = scheduler.run_workflow(
+    workflow="feature-development",
+    goal="Implement JWT Authentication",
+    parameters={"priority": "high", "max_retries": 3, "verification": "full"},
+)
 ```
 
-With development dependencies installed:
+## Setup
+
+The project uses `uv` as the only supported Python package and environment manager.
 
 ```bash
-python -m coverage run -m pytest
-python -m coverage report
+git clone <repo>
+cd loop-engineering
+
+uv venv
+source .venv/bin/activate
+
+uv sync
+
+uv run loop --help
 ```
 
-Current measured coverage for `core,agents,skills,verification,runtime,tools,worktree` is 91%.
+## Common Commands
+
+```bash
+uv run pytest
+uv run coverage run -m pytest
+uv run coverage report
+uv run ruff check .
+uv run mypy .
+uv run loop doctor
+uv run loop workflows
+uv run loop benchmark
+uv run loop run feature-development --goal "Implement JWT Authentication"
+```
+
+Current measured coverage for `core,agents,skills,verification,runtime,tools,worktree,loop_cli` is 91%.
+
+## CLI
+
+After `uv sync`, run the CLI with `uv run loop`.
+
+Examples:
+
+```bash
+uv run loop --help
+uv run loop version
+uv run loop workflows
+uv run loop adapters
+uv run loop doctor
+uv run loop config init
+uv run loop run feature-development --goal "Implement JWT Authentication"
+uv run loop run bug-fix --issue "Parser crashes on empty input" --parameters '{"max_retries": 3}'
+uv run loop new-project --goal "Build a FastAPI Todo backend"
+uv run loop benchmark all --json
+```
+
+Validation from a clean checkout:
+
+```bash
+uv venv
+source .venv/bin/activate
+
+uv sync
+
+uv run loop doctor
+uv run loop workflows
+uv run loop benchmark
+```
+
+`uv sync` installs the project in editable mode and exposes the `loop` entry point through `uv run`.
+
+Useful command equivalents:
+
+```bash
+uv run pytest
+uv run coverage run -m pytest
+uv run coverage report
+uv run loop benchmark
+uv run loop doctor
+uv run loop run feature-development --goal "Implement JWT Authentication"
+```
+
+Common run options:
+
+- `--repo` executes with runtime worktree support for a Git repository.
+- `--parameters` accepts a JSON object, `@file.json`, or comma-separated `key=value` pairs.
+- `--adapter codex --model <name>` routes execution through the Codex CLI adapter.
+- `--dry-run` prints the generated execution plan without running it.
+- `--json`, `--quiet`, and `--verbose` control output format.
 
 ## Minimal Usage
 

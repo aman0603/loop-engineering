@@ -5,8 +5,18 @@ description = "A modular loop engineering framework for autonomous software engi
 requires-python = ">=3.10"
 dependencies = []
 
-[project.optional-dependencies]
+[project.scripts]
+loop = "loop_cli.main:main"
+
+[dependency-groups]
 dev = [
+  "build>=1.2",
+  "coverage>=7.0",
+  "mypy>=1.8",
+  "pytest>=8.0",
+  "ruff>=0.5",
+]
+test = [
   "coverage>=7.0",
   "pytest>=8.0",
 ]
@@ -15,3 +25,23 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = [
+  "agents*",
+  "api*",
+  "core*",
+  "loop_cli*",
+  "memory*",
+  "runtime*",
+  "skills*",
+  "storage*",
+  "tools*",
+  "ui*",
+  "verification*",
+  "worktree*",
+]

@@ -1,5 +1,6 @@
 from core.workflow.engineering import DefaultEngineeringWorkflowFactory
 from core.workflow.dynamic import DynamicWorkflowBuilder
+from core.workflow.builtins import built_in_workflows
 from core.workflow.graph import (
     FunctionNode,
     NodeResult,
@@ -25,15 +26,18 @@ from core.workflow.nodes import (
     TestingNode,
     VerificationNode,
 )
+from core.workflow.library import EngineeringWorkflowDefinition, WorkflowStepSpec
 from core.workflow.plan_executor import PlanExecutionResult, PlanWorkflowExecutor
 
 __all__ = [
     "DefaultEngineeringWorkflowFactory",
     "DynamicWorkflowBuilder",
+    "EngineeringWorkflowDefinition",
     "FunctionNode",
     "AdaptiveReplanningNode",
     "AgentAdapterStepNode",
     "BranchRule",
+    "built_in_workflows",
     "DecisionNode",
     "DocumentationNode",
     "HumanApprovalNode",
@@ -53,4 +57,5 @@ __all__ = [
     "WorkflowEngine",
     "WorkflowExecution",
     "WorkflowStatus",
+    "WorkflowStepSpec",
 ]

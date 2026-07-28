@@ -148,6 +148,26 @@ class PlannerEngine:
         )
         return replanned
 
+    def plan_workflow_definition(
+        self,
+        workflow_definition: Any,
+        task: Task,
+        context: ExecutionContext,
+        parameters: dict[str, Any] | None = None,
+        registry: Any | None = None,
+    ) -> ExecutionPlan:
+        started = time.monotonic()
+        context.emit(Event(EventType.PLANNING_STARTED, task.id, {"planner": self.name, "workflow": workflow_definition.name}))
+        plan = workflow_definition.to_execution_plan(task, parameters=parameters, registry=registry)
+        metrics = plan.metrics()
+        metrics["planning_time_ms"] = (time.monotonic() - started) * 1000
+        for name, value in metrics.items():
+            context.metrics.set(f"planning.{name}", value)
+        context.runtime_variables["execution_plan"] = plan
+        context.add_artifact(PlanArtifact(self.name, plan.to_dict(), workflow=workflow_definition.name, revision=plan.revision))
+        context.emit(Event(EventType.PLANNING_COMPLETED, task.id, {"plan_id": plan.id, "workflow": workflow_definition.name, **metrics}))
+        return plan
+
     def _capabilities_for(self, task: Task) -> list[str]:
         explicit = task.metadata.get("capabilities")
         if isinstance(explicit, list) and explicit:

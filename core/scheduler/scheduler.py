@@ -13,7 +13,7 @@ from core.planning import ExecutionPlan, PlannerEngine
 from core.registries import AgentRegistry, SkillRegistry, ToolRegistry, VerifierRegistry, WorkflowRegistry
 from core.scheduler.queue import TaskPriorityQueue
 from core.task_manager import InMemoryTaskRepository, Task, TaskRepository, TaskStatus
-from core.workflow import DefaultEngineeringWorkflowFactory, DynamicWorkflowBuilder, PlanWorkflowExecutor, WorkflowEngine
+from core.workflow import DefaultEngineeringWorkflowFactory, DynamicWorkflowBuilder, PlanWorkflowExecutor, WorkflowEngine, built_in_workflows
 from skills.coding import CodingSkill
 from skills.planning import PlanningSkill
 from tools import FileSystemTool, GitTool, HTTPTool, PythonTool, SearchTool, ShellTool, TestTool
@@ -85,6 +85,8 @@ class Scheduler:
             event_bus=event_bus,
         ).build()
         registry.register(workflow)
+        for workflow_definition in built_in_workflows():
+            registry.register_workflow(workflow_definition)
         tool_registry = ToolRegistry()
         for tool in [ShellTool(), FileSystemTool(), GitTool(), PythonTool(), TestTool(), SearchTool(), HTTPTool()]:
             tool_registry.register(tool)
@@ -155,6 +157,77 @@ class Scheduler:
             self.event_bus.publish(Event(EventType.TASK_COMPLETED, finished_task.id, {"plan_id": execution_plan.id}))
         else:
             self.event_bus.publish(Event(EventType.TASK_FAILED, finished_task.id, {"plan_id": execution_plan.id}))
+        return finished_task
+
+    def run_workflow(
+        self,
+        workflow: str,
+        goal: str,
+        parameters: dict | None = None,
+    ) -> Task:
+        params = parameters or {}
+        max_retries = int(params.get("max_retries", 3))
+        task = Task(
+            title=f"Run workflow: {workflow}",
+            description=str(params.get("description", goal)),
+            goal=goal,
+            acceptance_criteria=list(params.get("acceptance_criteria", [])),
+            max_attempts=max_retries,
+            metadata={"workflow_library": workflow, "workflow_parameters": params},
+        )
+        workflow_definition = self.workflow_registry.load_workflow(workflow)
+        context = ExecutionContext(
+            task=task,
+            configuration=ExecutionConfig(retry_limit=max_retries, workflow_name=workflow),
+            current_workflow=workflow,
+            event_bus=self.event_bus,
+        )
+        plan = self.planner_engine.plan_workflow_definition(
+            workflow_definition,
+            task,
+            context,
+            parameters=params,
+            registry=self.workflow_registry,
+        )
+        workflow_graph = DynamicWorkflowBuilder(
+            PlanWorkflowExecutor(skills=self.skill_registry, agents=self.agent_registry, planner=self.planner_engine)
+        ).build(plan)
+        self.repository.save(task)
+        worktree = None
+        try:
+            if self.worktree_manager is not None:
+                worktree = self.worktree_manager.create_worktree(context)
+            execution = self.workflow_engine.run(workflow_graph, context)
+        finally:
+            if worktree is not None and self.worktree_manager is not None:
+                self.worktree_manager.cleanup_worktree(context, worktree, force=True)
+
+        finished_task = execution.context.task
+        if execution.status.value == "COMPLETED" and finished_task.status == TaskStatus.NEW:
+            finished_task.transition_to(TaskStatus.PLANNING)
+            finished_task.transition_to(TaskStatus.EXECUTING)
+            finished_task.transition_to(TaskStatus.VERIFYING)
+            finished_task.transition_to(TaskStatus.DONE)
+        elif execution.status.value != "COMPLETED" and finished_task.status == TaskStatus.NEW:
+            finished_task.transition_to(TaskStatus.FAILED)
+        initial_snapshot = execution.context.observability_snapshot()
+        visualization = workflow_definition.visualization_artifact(plan, initial_snapshot)
+        execution.context.add_artifact(visualization)
+        success = execution.status.value == "COMPLETED"
+        execution.context.metrics.set(f"workflow.{workflow}.success", 1 if success else 0)
+        execution.context.metrics.set(f"workflow.{workflow}.verification_failures", len(execution.context.verification_results))
+        snapshot = execution.context.observability_snapshot()
+        finished_task.metadata["last_execution"] = snapshot
+        finished_task.metadata["last_plan"] = plan.to_dict()
+        finished_task.metadata["workflow_visualization"] = visualization.to_dict()
+        self.repository.save(finished_task)
+        self.event_bus.publish(
+            Event(
+                EventType.TASK_COMPLETED if success else EventType.TASK_FAILED,
+                finished_task.id,
+                {"workflow": workflow, "plan_id": plan.id},
+            )
+        )
         return finished_task
 
     def submit(self, task: Task) -> None:
